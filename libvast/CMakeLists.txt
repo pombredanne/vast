@@ -8,9 +8,9 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/vast/config.hpp.in
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
-# get header files; only needed by CMake generators,
-# e.g., for creating proper Xcode projects
-file(GLOB_RECURSE libvast_headers "vast/*.hpp")
+# Some CMake generators (e.g., XCode) require header files in
+# addition to the sources.
+file(GLOB_RECURSE libvast_headers "${CMAKE_CURRENT_SOURCE_DIR}/vast/*.hpp")
 
 set(libvast_sources
   ${aux_sources}
