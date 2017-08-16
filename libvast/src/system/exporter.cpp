@@ -47,7 +47,6 @@ void ship_results(stateful_actor<exporter_state>* self) {
 }
 
 void shutdown(stateful_actor<exporter_state>* self) {
-  // TODO: enable clean shutdown on CTRL + C ...?
   if (rank(self->state.unprocessed) > 0 || !self->state.results.empty())
     return;
   timespan runtime = steady_clock::now() - self->state.start;
@@ -108,6 +107,13 @@ behavior exporter(stateful_actor<exporter_state>* self, expression expr,
       self->quit(msg.reason);
     }
   );
+  self->set_down_handler(
+    [=](const down_msg& msg) {
+      VAST_DEBUG(self, "received DOWN from", msg.source);
+      if (msg.reason == exit_reason::user_shutdown)
+        shutdown(self);
+    }
+  );
   return {
     [=](bitmap& hits) {
       timespan runtime = steady_clock::now() - self->state.start;
@@ -162,15 +168,14 @@ behavior exporter(stateful_actor<exporter_state>* self, expression expr,
           self->state.results.push_back(std::move(candidate));
         else
           VAST_DEBUG(self, "ignores false positive:", candidate);
-        if (sender == self->state.index || sender == self->state.archive) {
+        if (sender == self->state.archive) {
           mask.append_bits(false, candidate.id() - mask.size());
           mask.append_bit(true);
         }
       }
-      if (sender == self->state.index || sender == self->state.archive) {
-        self->state.stats.processed += candidates.size();
+      self->state.stats.processed += candidates.size();
+      if (sender == self->state.archive)
         self->state.unprocessed -= mask;
-      }
       ship_results(self);
       request_more_hits(self);
       if (self->state.stats.received == self->state.stats.expected)

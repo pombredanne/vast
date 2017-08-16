@@ -15,7 +15,6 @@ struct node_state {
   tracker_type tracker;
   std::unordered_map<std::string, int> labels;
   std::string name = "node";
-  std::unordered_map<expression, caf::actor> continuous_queries;
 };
 
 } // namespace system

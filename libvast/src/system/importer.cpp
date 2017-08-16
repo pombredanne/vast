@@ -158,9 +158,9 @@ behavior importer(stateful_actor<importer_state>* self, path dir,
         self->state.meta_store = meta_store_type{};
       } else {
         auto& cq = self->state.continuous_queries;
-        auto itr = find(begin(cq), end(cq), msg.source);
+        auto itr = find(cq.begin(), cq.end(), msg.source);
         if (itr != cq.end()) {
-          VAST_DEBUG("Continous query ended.");
+          VAST_DEBUG(self, "finished continuous query for ", msg.source);
           cq.erase(itr);
         }
       }
@@ -182,9 +182,8 @@ behavior importer(stateful_actor<importer_state>* self, path dir,
       VAST_DEBUG(self, "registers index", index);
       self->send(self->state.index, sys_atom::value, put_atom::value, index);
     },
-    // TODO: some atom ?
     [=](const actor& exp) {
-      VAST_DEBUG("Received new continuous query.");
+      VAST_DEBUG(self, "received new continuous query for ", exp);
       self->monitor(exp);
       self->state.continuous_queries.push_back(exp);
     },
@@ -192,7 +191,6 @@ behavior importer(stateful_actor<importer_state>* self, path dir,
       VAST_ASSERT(!events.empty());
       VAST_DEBUG(self, "got", events.size(), "events");
       VAST_DEBUG(self, "has", self->state.available, "IDs available");
-      
       if (!self->state.meta_store) {
         self->quit(make_error(ec::unspecified, "no meta store configured"));
         return;

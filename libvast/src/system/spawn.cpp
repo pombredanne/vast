@@ -85,14 +85,11 @@ expected<actor> spawn_exporter(stateful_actor<node_state>* self,
   if (has_continuous_option(query_opts)) {
     self->request(self->state.tracker, infinite, get_atom::value).then(
       [=](registry& reg) mutable {
-        VAST_DEBUG("Looking for importers");
-        // TODO: should probably not restricted to the local node?
+        VAST_DEBUG(self, "looks for importers");
         auto& local = reg[self->state.name];
         const std::string wanted = "importer";
         for (auto& comp : local) {
-          if (std::equal(std::begin(wanted), std::end(wanted),
-                         std::begin(comp.first))) {
-            VAST_DEBUG("> found match!");
+          if (std::equal(wanted.begin(), wanted.end(), comp.first.begin())) {
             self->send(comp.second.actor, exp);
           }
         }
