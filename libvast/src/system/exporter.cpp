@@ -45,10 +45,8 @@ void ship_results(stateful_actor<exporter_state>* self) {
   }
   self->send(self->state.sink, msg);
 }
-
-void shutdown(stateful_actor<exporter_state>* self) {
-  if (rank(self->state.unprocessed) > 0 || !self->state.results.empty())
-    return;
+  
+void report_statistics(stateful_actor<exporter_state>* self) {
   timespan runtime = steady_clock::now() - self->state.start;
   self->state.stats.runtime = runtime;
   VAST_DEBUG(self, "completed in", runtime);
@@ -66,8 +64,14 @@ void shutdown(stateful_actor<exporter_state>* self) {
     self->send(self->state.accountant, "exporter.selectivity", selectivity);
     self->send(self->state.accountant, "exporter.runtime", runtime);
   }
-  if (!has_continuous_option(self->state.opts))
-    self->send_exit(self, exit_reason::normal);
+}
+
+void shutdown(stateful_actor<exporter_state>* self) {
+  if (rank(self->state.unprocessed) > 0 || !self->state.results.empty()
+      || has_continuous_option(self->state.opts))
+    return;
+  report_statistics(self);
+  self->send_exit(self, exit_reason::normal);
 }
 
 void request_more_hits(stateful_actor<exporter_state>* self) {
@@ -105,13 +109,17 @@ behavior exporter(stateful_actor<exporter_state>* self, expression expr,
       self->send(self->state.sink, sys_atom::value, delete_atom::value);
       self->send_exit(self->state.sink, msg.reason);
       self->quit(msg.reason);
+      if (msg.reason != exit_reason::kill)
+        report_statistics(self);
     }
   );
   self->set_down_handler(
     [=](const down_msg& msg) {
       VAST_DEBUG(self, "received DOWN from", msg.source);
-      if (msg.reason == exit_reason::user_shutdown)
-        shutdown(self);
+      if (has_continuous_option(self->state.opts)
+          && (msg.source == self->state.archive
+              || msg.source == self->state.index))
+        report_statistics(self);
     }
   );
   return {
@@ -205,14 +213,19 @@ behavior exporter(stateful_actor<exporter_state>* self, expression expr,
     [=](archive_type const& archive) {
       VAST_DEBUG(self, "registers archive", archive);
       self->state.archive = archive;
+      if (has_continuous_option(self->state.opts))
+        self->monitor(archive);
     },
     [=](index_atom, actor const& index) {
       VAST_DEBUG(self, "registers index", index);
       self->state.index = index;
+      if (has_continuous_option(self->state.opts))
+        self->monitor(index);
     },
     [=](sink_atom, actor const& sink) {
       VAST_DEBUG(self, "registers index", sink);
       self->send(self->state.sink, sys_atom::value, put_atom::value, sink);
+      self->monitor(self->state.sink);
     },
     [=](run_atom) {
       VAST_INFO(self, "executes query", expr);
