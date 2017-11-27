@@ -62,6 +62,11 @@ reader::reader(std::unique_ptr<std::istream> input) : input_{std::move(input)} {
 }
 
 expected<event> reader::read() {
+  if (!events_.empty()) {
+    auto x = std::move(events_.front());
+    events_.pop();
+    return x;
+  }
   VAST_ASSERT(input_);
   // We have to read the input block-wise in a manner that respects the
   // protocol framing.
@@ -92,7 +97,12 @@ expected<event> reader::read() {
   std::chrono::duration<uint32_t> since_epoch{r.header.timestamp};
   auto ts = timestamp{std::chrono::duration_cast<timespan>(since_epoch)};
   e.timestamp(ts);
-  return e;
+  if (!events_.empty()) {
+    auto x = std::move(events_.front());
+    events_.pop();
+    return x;
+  }
+  return no_error;
 }
 
 expected<void> reader::schema(vast::schema const&) {

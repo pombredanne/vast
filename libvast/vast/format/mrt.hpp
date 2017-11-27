@@ -1,6 +1,9 @@
 #ifndef VAST_FORMAT_MRT_HPP
 #define VAST_FORMAT_MRT_HPP
 
+#include <iostream>
+#include <queue>
+
 #include "vast/address.hpp"
 #include "vast/event.hpp"
 #include "vast/none.hpp"
@@ -265,7 +268,7 @@ struct rib_generic {
   std::vector<rib_entry> entries;
 };
 
-struct peer_entries;
+struct peer_entry; // forward declaration
 
 /// An initial PEER_INDEX_TABLE MRT record provides the BGP ID of the
 /// collector, an OPTIONAL view name, and a list of indexed peers.
@@ -289,7 +292,7 @@ struct peer_index_table {
   uint16_t view_name_length;
   std::string view_name;
   uint16_t peer_count;
-  std::vector<peer_entries> peer_entries;
+  std::vector<peer_entry> peer_entries;
 };
 
 /// Peer Entries message.
@@ -322,7 +325,7 @@ struct peer_index_table {
 ///    Bit 6: Peer AS number size:  0 = 16 bits, 1 = 32 bits
 ///    Bit 7: Peer IP Address family:  0 = IPv4,  1 = IPv6
 ///
-struct peer_entries {
+struct peer_entry {
   uint8_t peer_type;
   uint32_t peer_bgp_id;
   address peer_ip_address;
@@ -510,10 +513,10 @@ auto make_ip_v4_v6_parser(F f) {
 namespace table_dump_v2 {
 
 struct peer_entries_parser : parser<peer_entries_parser> {
-  using attribute = peer_entries;
+  using attribute = peer_entry;
 
   template <class Iterator>
-  bool parse(Iterator& f, const Iterator& l, peer_entries& x)
+  bool parse(Iterator& f, const Iterator& l, peer_entry& x)
   const {
     using namespace parsers;
     auto ip_addr = detail::make_ip_v4_v6_parser(
@@ -622,6 +625,7 @@ public:
 private:
   std::unique_ptr<std::istream> input_;
   std::vector<char> buffer_;
+  std::queue<event> events_;
   record_parser parser_;
 };
 
