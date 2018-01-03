@@ -14,19 +14,27 @@ namespace mrt {
 
 namespace table_dump_v2 {
 
-const auto peer_entries_type = record_type{{
-  {"type", count_type{}},
+const auto peer_entry_type = record_type{{
+  {"index", count_type{}},
   {"bgp_id", count_type{}},
   {"ip_address", address_type{}},
   {"as", count_type{}},
-}};
+}}.name("mrt::table_dump_v2::peer_entry");
 
-const auto peer_index_table_type = record_type{{
-  {"collector_bgp_id", count_type{}},
-  {"view_name", string_type{}},
-  {"ip_address", address_type{}},
-  {"peer_entries", vector_type{peer_entries_type}}
-}};
+const auto rib_entry_type = record_type{{
+  {"peer_index", count_type{}},
+  {"prefix", subnet_type{}},
+  {"as_path", vector_type{count_type{}}},
+  {"origin_as", count_type{}},
+  {"origin", string_type{}.attributes({{"skip"}})},
+  {"nexthop", address_type{}},
+  {"local_pref", count_type{}},
+  {"med", count_type{}},
+  {"community", vector_type{count_type{}}},
+  {"atomic_aggregate", boolean_type{}},
+  {"aggregator_as", count_type{}},
+  {"aggregator_ip", address_type{}},
+}}.name("mrt::table_dump_v2::rib_entry");
 
 } // namespace table_dump_v2
 
@@ -41,24 +49,42 @@ const auto message_as4_type = type{};
 namespace {
 
 struct factory {
-  value operator()(none) const {
-    return {};
+  factory(std::queue<event>& events, uint32_t timestamp) : events_(events) {
+    std::chrono::duration<uint32_t> since_epoch{timestamp};
+    timestamp_ = vast::timestamp{
+      std::chrono::duration_cast<timespan>(since_epoch)};
   }
 
-  value operator()(table_dump_v2::peer_index_table& /* x */) const {
-    // TODO: Implement this function.
-    return {nil, table_dump_v2::peer_index_table_type};
+  void operator()(none) const {
+    // nop
   }
 
-  value operator()(bgp4mp::message_as4& /* x */) const {
-    // TODO: Implement this function.
-    return {nil, bgp4mp::message_as4_type};
+  void operator()(table_dump_v2::peer_index_table& x) {
+    for (count i = 0u; i < x.peer_count; i++) {
+      event e{{
+        vector{i,
+               x.peer_entries[i].peer_bgp_id,
+               x.peer_entries[i].peer_ip_address,
+               x.peer_entries[i].peer_as},
+        table_dump_v2::peer_entry_type
+      }};
+      e.timestamp(timestamp_);
+      events_.push(e);
+    }
   }
+
+  void operator()(bgp4mp::message_as4& /* x */) const {
+    // TODO: Implement this function.
+  }
+
+  std::queue<event>& events_;
+  vast::timestamp timestamp_;
 };
 
 } // namespace anonymous
 
 reader::reader(std::unique_ptr<std::istream> input) : input_{std::move(input)} {
+  VAST_ASSERT(input_);
 }
 
 expected<event> reader::read() {
@@ -67,7 +93,6 @@ expected<event> reader::read() {
     events_.pop();
     return x;
   }
-  VAST_ASSERT(input_);
   // We have to read the input block-wise in a manner that respects the
   // protocol framing.
   static constexpr size_t common_header_length = 12;
@@ -92,11 +117,8 @@ expected<event> reader::read() {
   if (!parser_(buffer_, r))
     return make_error(ec::format_error, "failed to parse MRT message");
   // Convert
-  auto e = event{visit(factory{}, r.message)};
   // Take the timestamp from the Common Header as event time.
-  std::chrono::duration<uint32_t> since_epoch{r.header.timestamp};
-  auto ts = timestamp{std::chrono::duration_cast<timespan>(since_epoch)};
-  e.timestamp(ts);
+  visit(factory{events_, r.header.timestamp}, r.message);
   if (!events_.empty()) {
     auto x = std::move(events_.front());
     events_.pop();

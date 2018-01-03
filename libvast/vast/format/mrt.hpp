@@ -512,7 +512,7 @@ auto make_ip_v4_v6_parser(F f) {
 
 namespace table_dump_v2 {
 
-struct peer_entries_parser : parser<peer_entries_parser> {
+struct peer_entry_parser : parser<peer_entry_parser> {
   using attribute = peer_entry;
 
   template <class Iterator>
@@ -540,7 +540,7 @@ struct peer_index_table_parser : parser<peer_index_table_parser> {
   const {
     using namespace parsers;
     auto view_name = nbytes<char>(x.view_name_length);
-    auto peer_entries = rep(peer_entries_parser{}, x.peer_count);
+    auto peer_entries = rep(peer_entry_parser{}, x.peer_count);
     auto p = b32be >> b16be >> view_name >> b16be >> peer_entries;
     return p(f, l, x.collector_bgp_id, x.view_name_length, x.view_name,
              x.peer_count, x.peer_entries);
