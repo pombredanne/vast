@@ -356,8 +356,35 @@ enum subtypes {
   MESSAGE_AS4_LOCAL = 7,
 };
 
+/// This message is used to encode state changes in the BGP finite state
+/// machine (FSM).  The BGP FSM states are encoded in the Old State and
+/// New State fields to indicate the previous and current state.  In some
+/// cases, the Peer AS Number may be undefined.  In such cases, the value
+/// of this field MAY be set to zero.  The format is illustrated below:
+///
+///      0                   1                   2                   3
+///      0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+///     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+///     |         Peer AS Number        |        Local AS Number        |
+///     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+///     |        Interface Index        |        Address Family         |
+///     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+///     |                      Peer IP Address (variable)               |
+///     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+///     |                      Local IP Address (variable)              |
+///     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+///     |            Old State          |          New State            |
+///     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+///
 struct state_change {
-  // TODO
+  uint16_t peer_as_number;
+  uint16_t local_as_number;
+  uint16_t interface_index;
+  uint16_t address_family;
+  address peer_ip_address;
+  address local_ip_address;
+  uint16_t old_state;
+  uint16_t new_state;
 };
 
 /// This subtype is used to encode BGP messages.  It can be used to encode
@@ -551,6 +578,23 @@ struct peer_index_table_parser : parser<peer_index_table_parser> {
 
 namespace bgp4mp {
 
+struct state_change_parser : parser<state_change_parser> {
+  using attribute = state_change;
+
+  template <class Iterator>
+  bool parse(Iterator& f, const Iterator& l, state_change& x) const {
+    using namespace parsers;
+    auto ip_addr = detail::make_ip_v4_v6_parser(
+      [&] { return x.address_family == 1; }
+    );
+    auto p = b16be >> b16be >> b16be >> b16be >> ip_addr >> ip_addr >> b16be >>
+             b16be;
+    return p(f, l, x.peer_as_number, x.local_as_number, x.interface_index,
+             x.address_family, x.peer_ip_address, x.local_ip_address,
+             x.old_state, x.new_state);
+  };
+};
+
 struct message_as4_parser : parser<message_as4_parser> {
   using attribute = message_as4;
 
@@ -568,6 +612,23 @@ struct message_as4_parser : parser<message_as4_parser> {
   };
 };
 
+struct state_change_as4_parser : parser<state_change_as4_parser> {
+  using attribute = state_change_as4;
+
+  template <class Iterator>
+  bool parse(Iterator& f, const Iterator& l, state_change_as4& x) const {
+    using namespace parsers;
+    auto ip_addr = detail::make_ip_v4_v6_parser(
+      [&] { return x.address_family == 1; }
+    );
+    auto p = b32be >> b32be >> b16be >> b16be >> ip_addr >> ip_addr >> b16be >>
+             b16be;
+    return p(f, l, x.peer_as_number, x.local_as_number, x.interface_index,
+             x.address_family, x.peer_ip_address, x.local_ip_address,
+             x.old_state, x.new_state);
+  };
+};
+
 } // namespace bgp4mp
 
 /// The top-level MRT record. All MRT format records have a Common Header
@@ -577,7 +638,9 @@ struct record {
   variant<
     none,
     table_dump_v2::peer_index_table,
-    bgp4mp::message_as4
+    bgp4mp::state_change,
+    bgp4mp::message_as4,
+    bgp4mp::state_change_as4
   > message;
 };
 
@@ -590,16 +653,26 @@ struct record_parser : parser<record_parser> {
       return x.header.type == TABLE_DUMP_V2
         && x.header.subtype == table_dump_v2::PEER_INDEX_TABLE;
     });
+    auto state_change = bgp4mp::state_change_parser{}.when([&] {
+      return x.header.type == BGP4MP
+        && x.header.subtype == bgp4mp::STATE_CHANGE;
+    });
     auto message_as4 = bgp4mp::message_as4_parser{}.when([&] {
       return x.header.type == BGP4MP
         && x.header.subtype == bgp4mp::MESSAGE_AS4;
+    });
+    auto state_change_as4 = bgp4mp::state_change_as4_parser{}.when([&] {
+      return x.header.type == BGP4MP
+        && x.header.subtype == bgp4mp::STATE_CHANGE_AS4;
     });
     auto skip = parsers::eps ->* [&] {
       f += std::min(static_cast<size_t>(l - f),
                     static_cast<size_t>(x.header.length));
     };
     auto msg = peer_index_table
+             | state_change
              | message_as4
+             | state_change_as4
              | skip;
     auto p = common_header_parser{} >> msg;
     return p(f, l, x.header, x.message);

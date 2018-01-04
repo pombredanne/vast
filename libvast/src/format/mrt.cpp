@@ -38,11 +38,30 @@ const auto rib_entry_type = record_type{{
 
 } // namespace table_dump_v2
 
-
 namespace bgp4mp {
 
-// TODO: Define this type.
-const auto message_as4_type = type{};
+const auto update_announcement_type = record_type{{
+  {"source_ip", address_type{}},
+  {"source_as", count_type{}},
+  {"prefix", subnet_type{}},
+  {"as_path", vector_type{count_type{}}},
+  {"origin_as", count_type{}},
+  {"origin", string_type{}.attributes({{"skip"}})},
+  {"nexthop", address_type{}},
+  {"local_pref", count_type{}},
+  {"med", count_type{}},
+  {"community", vector_type{count_type{}}},
+  {"atomic_aggregate", boolean_type{}},
+  {"aggregator_as", count_type{}},
+  {"aggregator_ip", address_type{}},
+}}.name("mrt::bgp4mp::update::announcement");
+
+const auto state_change_type = record_type{{
+  {"source_ip", address_type{}},
+  {"source_as", count_type{}},
+  {"old_state", count_type{}},
+  {"new_state", count_type{}},
+}}.name("mrt::bgp4mp::state_change");
 
 } // namespace bgp4mp
 
@@ -73,8 +92,32 @@ struct factory {
     }
   }
 
+  void operator()(bgp4mp::state_change& x) {
+    event e{{
+      vector{x.peer_ip_address,
+             x.peer_as_number,
+             x.old_state,
+             x.new_state},
+      bgp4mp::state_change_type
+    }};
+    e.timestamp(timestamp_);
+    events_.push(e);
+  }
+
   void operator()(bgp4mp::message_as4& /* x */) const {
     // TODO: Implement this function.
+  }
+
+  void operator()(bgp4mp::state_change_as4& x) {
+    event e{{
+      vector{x.peer_ip_address,
+             x.peer_as_number,
+             x.old_state,
+             x.new_state},
+      bgp4mp::state_change_type
+    }};
+    e.timestamp(timestamp_);
+    events_.push(e);
   }
 
   std::queue<event>& events_;
