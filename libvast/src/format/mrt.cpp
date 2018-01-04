@@ -40,6 +40,13 @@ const auto rib_entry_type = record_type{{
 
 namespace bgp4mp {
 
+const auto open_type = record_type{{
+  {"version", count_type{}},
+  {"my_autonomous_system", count_type{}},
+  {"hold_time", count_type{}},
+  {"bgp_identifier", count_type{}},
+}}.name("mrt::bgp4mp::open");
+
 const auto update_announcement_type = record_type{{
   {"source_ip", address_type{}},
   {"source_as", count_type{}},
@@ -55,6 +62,19 @@ const auto update_announcement_type = record_type{{
   {"aggregator_as", count_type{}},
   {"aggregator_ip", address_type{}},
 }}.name("mrt::bgp4mp::update::announcement");
+
+const auto update_withdraw_type = record_type{{
+  {"source_ip", address_type{}},
+  {"source_as", count_type{}},
+  {"prefix", subnet_type{}},
+}}.name("mrt::bgp4mp::update::withdrawn");
+
+const auto notification_type = record_type{{
+  {"error_code", count_type{}},
+  {"error_subcode", count_type{}},
+}}.name("mrt::bgp4mp::notification");
+
+const auto keepalive_type = record_type{}.name("mrt::bgp4mp::keepalive");
 
 const auto state_change_type = record_type{{
   {"source_ip", address_type{}},

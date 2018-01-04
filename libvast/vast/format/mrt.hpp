@@ -85,6 +85,94 @@ struct message_header {
   uint8_t type;
 };
 
+/// In addition to the fixed-size BGP header, the OPEN message contains
+/// the following fields:
+///
+///       0                   1                   2                   3
+///       0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+///       +-+-+-+-+-+-+-+-+
+///       |    Version    |
+///       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+///       |     My Autonomous System      |
+///       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+///       |           Hold Time           |
+///       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+///       |                         BGP Identifier                        |
+///       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+///       | Opt Parm Len  |
+///       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+///       |                                                               |
+///       |             Optional Parameters (variable)                    |
+///       |                                                               |
+///       +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+///
+struct open {
+  uint8_t version;
+  uint16_t my_autonomous_system;
+  uint16_t hold_time;
+  uint32_t bgp_identifier;
+  uint8_t opt_parm_len;
+  // optional_parameters
+};
+
+struct path_attribute;
+
+///   An UPDATE message is used to advertise feasible routes that share
+///   common path attributes to a peer, or to withdraw multiple unfeasible
+///   routes from service (see 3.1).  An UPDATE message MAY simultaneously
+///   advertise a feasible route and withdraw multiple unfeasible routes
+///   from service.  The UPDATE message always includes the fixed-size BGP
+///   header, and also includes the other fields, as shown below (note,
+///   some of the shown fields may not be present in every UPDATE message):
+///
+///      +-----------------------------------------------------+
+///      |   Withdrawn Routes Length (2 octets)                |
+///      +-----------------------------------------------------+
+///      |   Withdrawn Routes (variable)                       |
+///      +-----------------------------------------------------+
+///      |   Total Path Attribute Length (2 octets)            |
+///      +-----------------------------------------------------+
+///      |   Path Attributes (variable)                        |
+///      +-----------------------------------------------------+
+///      |   Network Layer Reachability Information (variable) |
+///      +-----------------------------------------------------+
+///
+struct update {
+  uint16_t withdrawn_routes_length;
+  std::vector<subnet> withdrawn_routes;
+  uint16_t total_path_attribute_length;
+  std::vector<path_attribute> path_attributes;
+  std::vector<subnet> network_layer_reachability_information;
+};
+
+/// In addition to the fixed-size BGP header, the NOTIFICATION message
+/// contains the following fields:
+///
+///      0                   1                   2                   3
+///      0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+///      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+///      | Error code    | Error subcode |   Data (variable)             |
+///      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+///
+struct notification {
+  uint8_t error_code;
+  uint8_t error_subcode;
+  // data
+};
+
+/// A KEEPALIVE message consists of only the message header and has a
+/// length of 19 octets.
+struct keepalive;
+
+struct message {
+  message_header header;
+  variant<
+    open,
+    update,
+    notification
+  > message;
+};
+
 struct message_header_parser : parser<message_header_parser> {
   using attribute = message_header;
 
@@ -101,6 +189,10 @@ struct message_header_parser : parser<message_header_parser> {
     auto p = (bytes<16> >> b16be >> byte) ->* skip;
     return p(f, l, x.marker, x.length, x.type);
   }
+};
+
+struct message_parser : parser<message_parser> {
+
 };
 
 } // namespace bgp
